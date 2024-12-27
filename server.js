@@ -3,8 +3,8 @@ const app = express();
 app.use(express.json());
 
 const students = [
-    { number: 0, surname: 'Иванов', name: 'Иван', patronymic: 'Иванович' },
-    { number: 1, surname: 'Петров', name: 'Петр', patronymic: 'Петрович' }
+    { number: 0, surname: 'Мустафаев', name: 'Зелимхан', patronymic: 'Шахидович' },
+    { number: 1, surname: 'Умаров', name: 'Зелимхан', patronymic: 'Русланович' }
 ];
 
 let telegramIds = Array(students.length).fill(null);
