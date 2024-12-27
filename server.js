@@ -1,32 +1,51 @@
 const express = require('express');
-const cors = require('cors'); // Добавим CORS
+const cors = require('cors'); // Для поддержки кросс-доменных запросов
+
 const app = express();
 
-app.use(cors()); // Разрешаем CORS
-app.use(express.json()); // Обрабатываем JSON
+// Middleware
+app.use(cors()); // Разрешаем кросс-доменные запросы
+app.use(express.json()); // Для обработки JSON-тел
 
+// Массив студентов
 const students = [
     { number: 0, surname: 'Мустафаев', name: 'Зелимхан', patronymic: 'Шахидович' },
     { number: 1, surname: 'Умаров', name: 'Зелимхан', patronymic: 'Русланович' }
 ];
 
+// Массив Telegram ID (null по умолчанию)
 let telegramIds = Array(students.length).fill(null);
 
-// Логируем все запросы
-app.use((req, res, next) => {
-    console.log(`Запрос: ${req.method} ${req.url}`);
-    console.log('Тело запроса:', req.body);
-    next();
+// 🛡️ Проверка Telegram ID (на входе в WebApp)
+app.post('/api/check-telegram-id', (req, res) => {
+    const { telegramId } = req.body;
+
+    console.log('🔍 Проверка Telegram ID:', telegramId);
+
+    if (!telegramId) {
+        console.log('❌ Telegram ID не указан');
+        return res.status(400).json({ success: false, message: 'Telegram ID не указан' });
+    }
+
+    const isRegistered = telegramIds.includes(telegramId);
+
+    if (isRegistered) {
+        console.log('✅ Telegram ID уже зарегистрирован');
+        return res.json({ success: true, message: 'Telegram ID уже зарегистрирован' });
+    }
+
+    console.log('❌ Telegram ID не найден');
+    return res.json({ success: false, message: 'Telegram ID не найден' });
 });
 
-// Маршрут для привязки Telegram ID
+// 📝 Привязка Telegram ID к студенту
 app.post('/api/bind-telegram-id', (req, res) => {
     const { telegramId, surname, name, patronymic } = req.body;
 
-    console.log('Полученные данные:', { telegramId, surname, name, patronymic });
+    console.log('🔗 Попытка привязки Telegram ID:', { telegramId, surname, name, patronymic });
 
     if (!telegramId || !surname || !name || !patronymic) {
-        console.log('Ошибка: отсутствуют обязательные поля');
+        console.log('❌ Отсутствуют обязательные поля');
         return res.status(400).json({ success: false, message: 'Отсутствуют обязательные поля' });
     }
 
@@ -35,25 +54,28 @@ app.post('/api/bind-telegram-id', (req, res) => {
     );
 
     if (!student) {
-        console.log('Ошибка: студент не найден');
+        console.log('❌ Студент не найден');
         return res.status(400).json({ success: false, message: 'Студент не найден' });
     }
 
     if (telegramIds[student.number]) {
-        console.log('Ошибка: студент уже зарегистрирован');
+        console.log('❌ Этот студент уже зарегистрирован');
         return res.status(400).json({ success: false, message: 'Этот студент уже зарегистрирован' });
     }
 
+    // Привязываем Telegram ID к студенту
     telegramIds[student.number] = telegramId;
-    console.log('Успешная привязка Telegram ID');
+    console.log('✅ Telegram ID успешно привязан');
     return res.json({ success: true, message: 'Telegram ID успешно привязан' });
 });
 
-// Маршрут для проверки доступности сервера
+// 🛠️ Тестовый маршрут для проверки работы сервера
 app.get('/', (req, res) => {
-    res.send('Сервер работает корректно');
+    res.send('✅ Сервер работает корректно');
 });
 
-// Запуск сервера
+// 🚀 Запуск сервера
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
+app.listen(PORT, () => {
+    console.log(`🚀 Server is running on port ${PORT}`);
+});
