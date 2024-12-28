@@ -2,12 +2,24 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process'); // Для выполнения команд git
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 const STUDENTS_FILE = path.join('/data', 'students.json');
+
+// 🛡️ Настройка Git перед коммитом
+function configureGit() {
+    try {
+        execSync('git config --global user.name "Render User"');
+        execSync('git config --global user.email "render@example.com"');
+        console.log('✅ Git user.name и user.email успешно настроены');
+    } catch (error) {
+        console.error('❌ Ошибка при настройке Git:', error);
+    }
+}
 
 // 🛡️ Загрузка данных студентов
 function loadStudents() {
@@ -20,9 +32,18 @@ function loadStudents() {
     ];
 }
 
-// 🛡️ Сохранение данных студентов
+// 🛡️ Сохранение данных студентов с коммитом и пушем
 function saveStudents(students) {
     fs.writeFileSync(STUDENTS_FILE, JSON.stringify(students, null, 2));
+    try {
+        configureGit(); // Настраиваем Git перед коммитом
+        execSync(`git add ${STUDENTS_FILE}`);
+        execSync('git commit -m "Update students.json with new Telegram ID"');
+        execSync('git push');
+        console.log('✅ Изменения успешно закоммичены и отправлены в репозиторий');
+    } catch (error) {
+        console.error('❌ Ошибка при коммите и пуше изменений:', error);
+    }
 }
 
 // 📌 Проверка Telegram ID
