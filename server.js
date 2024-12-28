@@ -6,23 +6,18 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 📝 Студенты
-const students = [
-    { number: 0, surname: 'Мустафаев', name: 'Зелимхан', patronymic: 'Шахидович' },
-    { number: 1, surname: 'Умаров', name: 'Зелимхан', patronymic: 'Русланович' }
-];
+// 📝 Загрузка данных студентов из JSON-файла
+const STUDENTS_FILE = 'students.json';
 
-// 📝 Telegram ID (загружаем из файла, если существует)
-let telegramIds = [];
-if (fs.existsSync('telegramIds.json')) {
-    telegramIds = JSON.parse(fs.readFileSync('telegramIds.json'));
-} else {
-    telegramIds = Array(students.length).fill(null);
+function loadStudents() {
+    if (fs.existsSync(STUDENTS_FILE)) {
+        return JSON.parse(fs.readFileSync(STUDENTS_FILE));
+    }
+    return [];
 }
 
-// 🛡️ Сохранение Telegram ID в файл при обновлении
-function saveTelegramIds() {
-    fs.writeFileSync('telegramIds.json', JSON.stringify(telegramIds));
+function saveStudents(students) {
+    fs.writeFileSync(STUDENTS_FILE, JSON.stringify(students, null, 2));
 }
 
 // 📌 Проверка Telegram ID
@@ -36,7 +31,8 @@ app.post('/api/check-telegram-id', (req, res) => {
         return res.status(400).json({ success: false, message: 'Telegram ID не указан' });
     }
 
-    const isRegistered = telegramIds.includes(telegramId);
+    const students = loadStudents();
+    const isRegistered = students.some(student => student.telegramId === telegramId);
 
     if (isRegistered) {
         console.log('✅ Telegram ID уже зарегистрирован');
@@ -58,6 +54,8 @@ app.post('/api/bind-telegram-id', (req, res) => {
         return res.status(400).json({ success: false, message: 'Отсутствуют обязательные поля' });
     }
 
+    let students = loadStudents();
+
     // Ищем студента по ФИО
     const student = students.find(s => 
         s.surname === surname && s.name === name && s.patronymic === patronymic
@@ -68,21 +66,22 @@ app.post('/api/bind-telegram-id', (req, res) => {
         return res.status(400).json({ success: false, message: 'Студент не найден' });
     }
 
-    // Проверяем, что этот студент уже привязан к другому Telegram ID
-    if (telegramIds[student.number] && telegramIds[student.number] !== telegramId) {
+    // Проверяем, что студент уже зарегистрирован
+    if (student.telegramId && student.telegramId !== telegramId) {
         console.log('❌ Студент уже зарегистрирован другим Telegram ID');
         return res.status(400).json({ success: false, message: 'Этот студент уже использует расписание' });
     }
 
     // Если ID уже привязан к этому студенту
-    if (telegramIds[student.number] === telegramId) {
+    if (student.telegramId === telegramId) {
         console.log('✅ Telegram ID уже привязан к этому студенту');
         return res.json({ success: true, message: 'Этот студент уже использует расписание' });
     }
 
     // Привязываем Telegram ID к студенту
-    telegramIds[student.number] = telegramId;
-    saveTelegramIds(); // Сохраняем изменения в файл
+    student.telegramId = telegramId;
+    saveStudents(students); // Сохраняем изменения в файл
+
     console.log('✅ Telegram ID успешно привязан');
     return res.json({ success: true, message: 'Telegram ID успешно привязан' });
 });
@@ -94,7 +93,6 @@ app.get('/', (req, res) => {
 
 // 🛡️ Обработчик завершения процесса для сохранения данных
 process.on('SIGINT', () => {
-    saveTelegramIds();
     console.log('💾 Telegram ID сохранены');
     process.exit();
 });
