@@ -13,8 +13,8 @@ const STUDENTS_FILE = path.join('/data', 'students.json');
 // 🛡️ Настройка Git перед коммитом
 function configureGit() {
     try {
-        execSync('git config --global user.name "Render User"');
-        execSync('git config --global user.email "render@example.com"');
+        execSync('git config --global user.name "Justudent09"');
+        execSync('git config --global user.email "justudent09@mail.ru"');
         console.log('✅ Git user.name и user.email успешно настроены');
     } catch (error) {
         console.error('❌ Ошибка при настройке Git:', error);
