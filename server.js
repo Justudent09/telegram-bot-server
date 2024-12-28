@@ -1,24 +1,45 @@
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
+const { exec } = require('child_process');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 📝 Загрузка данных студентов из JSON-файла
+// 📌 Путь к students.json
 const STUDENTS_FILE = 'students.json';
 
+// 🛡️ Загрузка данных из JSON
 function loadStudents() {
     if (fs.existsSync(STUDENTS_FILE)) {
-        return JSON.parse(fs.readFileSync(STUDENTS_FILE));
+        return JSON.parse(fs.readFileSync(STUDENTS_FILE, 'utf8'));
     }
-    return [];
+    return [
+        { number: 0, surname: 'Мустафаев', name: 'Зелимхан', patronymic: 'Шахидович', telegramId: null },
+        { number: 1, surname: 'Умаров', name: 'Зелимхан', patronymic: 'Русланович', telegramId: null }
+    ];
 }
 
-function saveStudents(students) {
-    fs.writeFileSync(STUDENTS_FILE, JSON.stringify(students, null, 2));
+// 🛡️ Сохранение данных в JSON
+function saveStudents(data) {
+    fs.writeFileSync(STUDENTS_FILE, JSON.stringify(data, null, 2), 'utf8');
+    pushChangesToGit();
 }
+
+// 🚀 Автоматический push изменений в GitHub
+function pushChangesToGit() {
+    exec('git add students.json && git commit -m "Update students.json on server" && git push', (err, stdout, stderr) => {
+        if (err) {
+            console.error('❌ Ошибка при пуше изменений:', stderr);
+            return;
+        }
+        console.log('✅ Изменения успешно отправлены в GitHub:', stdout);
+    });
+}
+
+// Инициализация данных
+let students = loadStudents();
 
 // 📌 Проверка Telegram ID
 app.post('/api/check-telegram-id', (req, res) => {
@@ -31,7 +52,6 @@ app.post('/api/check-telegram-id', (req, res) => {
         return res.status(400).json({ success: false, message: 'Telegram ID не указан' });
     }
 
-    const students = loadStudents();
     const isRegistered = students.some(student => student.telegramId === telegramId);
 
     if (isRegistered) {
@@ -54,8 +74,6 @@ app.post('/api/bind-telegram-id', (req, res) => {
         return res.status(400).json({ success: false, message: 'Отсутствуют обязательные поля' });
     }
 
-    let students = loadStudents();
-
     // Ищем студента по ФИО
     const student = students.find(s => 
         s.surname === surname && s.name === name && s.patronymic === patronymic
@@ -66,7 +84,7 @@ app.post('/api/bind-telegram-id', (req, res) => {
         return res.status(400).json({ success: false, message: 'Студент не найден' });
     }
 
-    // Проверяем, что студент уже зарегистрирован
+    // Проверяем, что этот студент уже привязан к другому Telegram ID
     if (student.telegramId && student.telegramId !== telegramId) {
         console.log('❌ Студент уже зарегистрирован другим Telegram ID');
         return res.status(400).json({ success: false, message: 'Этот студент уже использует расписание' });
@@ -81,9 +99,13 @@ app.post('/api/bind-telegram-id', (req, res) => {
     // Привязываем Telegram ID к студенту
     student.telegramId = telegramId;
     saveStudents(students); // Сохраняем изменения в файл
-
     console.log('✅ Telegram ID успешно привязан');
     return res.json({ success: true, message: 'Telegram ID успешно привязан' });
+});
+
+// 📌 Эндпоинт для просмотра данных (для отладки)
+app.get('/api/students', (req, res) => {
+    res.json({ success: true, students });
 });
 
 // 📌 Тестовый маршрут для проверки работы сервера
@@ -93,6 +115,7 @@ app.get('/', (req, res) => {
 
 // 🛡️ Обработчик завершения процесса для сохранения данных
 process.on('SIGINT', () => {
+    saveStudents(students);
     console.log('💾 Telegram ID сохранены');
     process.exit();
 });
