@@ -4,11 +4,10 @@
   "main": "server.js",
   "dependencies": {
     "express": "^4.x.x",
-    "cors": "^2.8.5"
-    "firebase-admin": "^11.х.х"
+    "cors": "^2.8.5",
+    "firebase-admin": "^11.10.1"
   },
   "scripts": {
-    "start": "node server.js",
-    "postinstall": "mkdir -p /data"
+    "start": "node server.js"
   }
 }
