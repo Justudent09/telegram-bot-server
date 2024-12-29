@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process'); // Для выполнения команд git
+const { execSync } = require('child_process');
 
 const app = express();
 app.use(cors());
@@ -10,15 +10,16 @@ app.use(express.json());
 
 const STUDENTS_FILE = path.join('/data', 'students.json');
 
-// 🛡️ Настройка Git перед коммитом
-function configureGit() {
-    try {
-        execSync('git config --global user.name "Justudent09"');
-        execSync('git config --global user.email "justudent09@mail.ru"');
-        console.log('✅ Git user.name и user.email успешно настроены');
-    } catch (error) {
-        console.error('❌ Ошибка при настройке Git:', error);
-    }
+// ✅ Настройка git пользователя
+try {
+    const userName = process.env.GIT_USER_NAME || 'DefaultUser';
+    const userEmail = process.env.GIT_USER_EMAIL || 'default@example.com';
+
+    execSync(`git config --global user.name "${userName}"`);
+    execSync(`git config --global user.email "${userEmail}"`);
+    console.log('✅ Git user.name и user.email успешно настроены');
+} catch (error) {
+    console.error('❌ Ошибка при настройке git user.name и user.email:', error.message);
 }
 
 // 🛡️ Загрузка данных студентов
@@ -32,17 +33,16 @@ function loadStudents() {
     ];
 }
 
-// 🛡️ Сохранение данных студентов с коммитом и пушем
+// 🛡️ Сохранение данных студентов
 function saveStudents(students) {
     fs.writeFileSync(STUDENTS_FILE, JSON.stringify(students, null, 2));
     try {
-        configureGit(); // Настраиваем Git перед коммитом
-        execSync(`git add ${STUDENTS_FILE}`);
-        execSync('git commit -m "Update students.json with new Telegram ID"');
+        execSync('git add students.json');
+        execSync('git commit -m "Update students data"');
         execSync('git push');
-        console.log('✅ Изменения успешно закоммичены и отправлены в репозиторий');
+        console.log('✅ Изменения сохранены и отправлены в репозиторий');
     } catch (error) {
-        console.error('❌ Ошибка при коммите и пуше изменений:', error);
+        console.error('❌ Ошибка при git commit/push:', error.message);
     }
 }
 
