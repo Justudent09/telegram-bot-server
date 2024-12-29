@@ -1,114 +1,107 @@
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
-const { execSync } = require('child_process');
+const admin = require('firebase-admin');
+
+// 🔑 Инициализация Firebase Admin SDK
+const serviceAccount = require('./fir-16f0f-firebase-adminsdk-e925d-49823bb9bc.json'); // Убедись, что файл добавлен в проект
+
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    databaseURL: "https://fir-16f0f-default-rtdb.firebaseio.com"
+});
+
+const db = admin.database();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const STUDENTS_FILE = path.join('/data', 'students.json');
-
-// ✅ Настройка git пользователя
-try {
-    const userName = process.env.GIT_USER_NAME || 'DefaultUser';
-    const userEmail = process.env.GIT_USER_EMAIL || 'default@example.com';
-
-    execSync(`git config --global user.name "${userName}"`);
-    execSync(`git config --global user.email "${userEmail}"`);
-    console.log('✅ Git user.name и user.email успешно настроены');
-} catch (error) {
-    console.error('❌ Ошибка при настройке git user.name и user.email:', error.message);
-}
-
-// 🛡️ Загрузка данных студентов
-function loadStudents() {
-    if (fs.existsSync(STUDENTS_FILE)) {
-        return JSON.parse(fs.readFileSync(STUDENTS_FILE, 'utf8'));
-    }
-    return [
-        { number: 0, surname: 'Мустафаев', name: 'Зелимхан', patronymic: 'Шахидович', telegramId: null },
-        { number: 1, surname: 'Умаров', name: 'Зелимхан', patronymic: 'Русланович', telegramId: null }
-    ];
-}
-
-// 🛡️ Сохранение данных студентов
-function saveStudents(students) {
-    fs.writeFileSync(STUDENTS_FILE, JSON.stringify(students, null, 2));
-    try {
-        execSync('git add students.json');
-        execSync('git commit -m "Update students data"');
-        execSync('git push');
-        console.log('✅ Изменения сохранены и отправлены в репозиторий');
-    } catch (error) {
-        console.error('❌ Ошибка при git commit/push:', error.message);
-    }
-}
-
 // 📌 Проверка Telegram ID
-app.post('/api/check-telegram-id', (req, res) => {
+app.post('/api/check-telegram-id', async (req, res) => {
     const { telegramId } = req.body;
 
     if (!telegramId) {
         return res.status(400).json({ success: false, message: 'Telegram ID не указан' });
     }
 
-    const students = loadStudents();
-    const isRegistered = students.some(student => student.telegramId === telegramId);
+    try {
+        const snapshot = await db.ref('/students').once('value');
+        const students = snapshot.val() || [];
+        const isRegistered = Object.values(students).some(student => student.telegramId === telegramId);
 
-    return res.json({ success: isRegistered, message: isRegistered ? 'Telegram ID уже зарегистрирован' : 'Telegram ID не найден' });
+        return res.json({ 
+            success: isRegistered, 
+            message: isRegistered ? 'Telegram ID уже зарегистрирован' : 'Telegram ID не найден' 
+        });
+    } catch (error) {
+        console.error('Ошибка при проверке Telegram ID:', error);
+        return res.status(500).json({ success: false, message: 'Ошибка сервера' });
+    }
 });
 
 // 📌 Привязка Telegram ID к студенту
-app.post('/api/bind-telegram-id', (req, res) => {
+app.post('/api/bind-telegram-id', async (req, res) => {
     const { telegramId, surname, name, patronymic } = req.body;
 
     if (!telegramId || !surname || !name || !patronymic) {
         return res.status(400).json({ success: false, message: 'Отсутствуют обязательные поля' });
     }
 
-    let students = loadStudents();
-    const student = students.find(s => 
-        s.surname === surname && s.name === name && s.patronymic === patronymic
-    );
+    try {
+        const snapshot = await db.ref('/students').once('value');
+        const students = snapshot.val() || [];
 
-    if (!student) {
-        return res.status(400).json({ success: false, message: 'Студент не найден' });
+        const studentKey = Object.keys(students).find(key => 
+            students[key].surname === surname && 
+            students[key].name === name && 
+            students[key].patronymic === patronymic
+        );
+
+        if (!studentKey) {
+            return res.status(400).json({ success: false, message: 'Студент не найден' });
+        }
+
+        if (students[studentKey].telegramId && students[studentKey].telegramId !== telegramId) {
+            return res.status(400).json({ success: false, message: 'Этот студент уже использует расписание' });
+        }
+
+        students[studentKey].telegramId = telegramId;
+        await db.ref(`/students/${studentKey}`).update({ telegramId });
+
+        return res.json({ success: true, message: 'Telegram ID успешно привязан' });
+    } catch (error) {
+        console.error('Ошибка при привязке Telegram ID:', error);
+        return res.status(500).json({ success: false, message: 'Ошибка сервера' });
     }
-
-    if (student.telegramId && student.telegramId !== telegramId) {
-        return res.status(400).json({ success: false, message: 'Этот студент уже использует расписание' });
-    }
-
-    student.telegramId = telegramId;
-    saveStudents(students);
-
-    return res.json({ success: true, message: 'Telegram ID успешно привязан' });
 });
 
 // 📌 Добавление нового студента
-app.post('/api/add-student', (req, res) => {
+app.post('/api/add-student', async (req, res) => {
     const { surname, name, patronymic } = req.body;
 
     if (!surname || !name || !patronymic) {
         return res.status(400).json({ success: false, message: 'Все поля обязательны' });
     }
 
-    let students = loadStudents();
+    try {
+        const snapshot = await db.ref('/students').once('value');
+        const students = snapshot.val() || [];
 
-    const newStudent = {
-        number: students.length,
-        surname,
-        name,
-        patronymic,
-        telegramId: null
-    };
+        const newStudent = {
+            number: Object.keys(students).length,
+            surname,
+            name,
+            patronymic,
+            telegramId: null
+        };
 
-    students.push(newStudent);
-    saveStudents(students);
+        await db.ref(`/students/${newStudent.number}`).set(newStudent);
 
-    return res.json({ success: true, message: 'Студент успешно добавлен', student: newStudent });
+        return res.json({ success: true, message: 'Студент успешно добавлен', student: newStudent });
+    } catch (error) {
+        console.error('Ошибка при добавлении студента:', error);
+        return res.status(500).json({ success: false, message: 'Ошибка сервера' });
+    }
 });
 
 // 📌 Тестовый маршрут
